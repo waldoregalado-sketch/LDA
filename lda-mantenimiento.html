@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>LDA Mantenimiento — Grupo Los Dos Abuelos</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<!-- Firebase -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
+    onSnapshot, query, orderBy, serverTimestamp, getDoc }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import { getStorage, ref, uploadBytes, getDownloadURL }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+
+  // ── FIREBASE CONFIG ─────────────────────────────────────────────────────────
+  // 🔧 WALDO: Reemplaza estos valores con los de TU proyecto Firebase
+  // Ve a: console.firebase.google.com → Tu proyecto → Configuración → SDK
+  const firebaseConfig = {
+    apiKey: "AIzaSyDVByEIxw4pUqttvz095NrKG8oUkGw2Blk",
+    authDomain: "grupo-lda.firebaseapp.com",
+    projectId: "grupo-lda",
+    storageBucket: "grupo-lda.firebasestorage.app",
+    messagingSenderId: "527242773035",
+    appId: "1:527242773035:web:f29aa5fe81472f7872606e"
+  };
+
+  const app     = initializeApp(firebaseConfig);
+  const auth    = getAuth(app);
+  const db      = getFirestore(app);
+  const storage = getStorage(app);
+
+  // Exponer globalmente
+  window._fb = { auth, db, storage, signInWithEmailAndPassword, signOut,
+    onAuthStateChanged, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
+    onSnapshot, query, orderBy, serverTimestamp, getDoc, ref, uploadBytes, getDownloadURL };
+
+  window.dispatchEvent(new Event('firebase-ready'));
+</script>
+
+<style>
+:root {
+  --bg:       #0a0b0d;
+  --s1:       #12141a;
+  --s2:       #1a1d26;
+  --s3:       #222633;
+  --border:   #2a2e3d;
+  --accent:   #f0a500;
+  --accent2:  #ffc94d;
+  --blue:     #4a8fe8;
+  --green:    #3ecf8e;
+  --red:      #e85555;
+  --orange:   #e87c35;
+  --purple:   #9b72e8;
+  --text:     #edeef2;
+  --text2:    #8a8fa8;
+  --text3:    #4a4f66;
+
+  --status-pending:    #e87c35;
+  --status-assigned:   #4a8fe8;
+  --status-progress:   #9b72e8;
+  --status-waiting:    #e8c435;
+  --status-done:       #3ecf8e;
+  --status-closed:     #4a4f66;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+html,body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  height: 100%;
+  overflow: hidden;
+}
+
+#app { display:flex; flex-direction:column; height:100dvh; max-width:480px; margin:0 auto; }
+
+/* ── LOGIN ── */
+#loginScreen {
+  display:flex; flex-direction:column; justify-content:center;
+  align-items:center; height:100dvh; padding:32px 24px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(240,165,0,0.08) 0%, transparent 60%), var(--bg);
+}
+
+.login-logo {
+  font-family:'Syne',sans-serif; font-size:28px; font-weight:800;
+  color:var(--accent); letter-spacing:-0.5px; margin-bottom:4px; text-align:center;
+}
+.login-sub { font-size:13px; color:var(--text3); margin-bottom:40px; text-align:center; letter-spacing:1px; text-transform:uppercase; }
+
+.login-card {
+  width:100%; max-width:360px; background:var(--s1);
+  border:1px solid var(--border); border-radius:20px; padding:28px;
+}
+.login-card h2 { font-family:'Syne',sans-serif; font-size:18px; margin-bottom:20px; }
+
+.field { margin-bottom:14px; }
+.field label { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--text3); display:block; margin-bottom:6px; }
+.field input {
+  width:100%; background:var(--s2); border:1px solid var(--border);
+  border-radius:10px; padding:12px 14px; color:var(--text);
+  font-family:'DM Sans',sans-serif; font-size:15px; outline:none;
+  transition:border-color 0.2s;
+}
+.field input:focus { border-color:var(--accent); }
+
+.btn-primary {
+  width:100%; padding:14px; background:var(--accent); color:#0a0b0d;
+  border:none; border-radius:12px; font-family:'Syne',sans-serif;
+  font-size:15px; font-weight:700; cursor:pointer; transition:opacity 0.2s;
+  letter-spacing:0.3px;
+}
+.btn-primary:active { opacity:0.82; }
+
+.login-err { font-size:12px; color:var(--red); text-align:center; margin-top:10px; min-height:16px; }
+
+/* ── HEADER ── */
+.header {
+  flex-shrink:0; padding:44px 18px 14px;
+  background:linear-gradient(180deg,#0d0f15 0%,var(--bg) 100%);
+  border-bottom:1px solid var(--border);
+}
+.header-row { display:flex; justify-content:space-between; align-items:flex-start; }
+.header-title { font-family:'Syne',sans-serif; font-size:20px; font-weight:800; color:var(--accent); }
+.header-sub { font-size:11px; color:var(--text3); margin-top:2px; letter-spacing:0.5px; }
+.user-badge {
+  display:flex; align-items:center; gap:8px; background:var(--s2);
+  border:1px solid var(--border); border-radius:20px; padding:6px 12px;
+  font-size:12px; color:var(--text2); cursor:pointer;
+}
+.role-dot { width:7px; height:7px; border-radius:50%; background:var(--accent); }
+.role-dot.supervisor { background:var(--blue); }
+.role-dot.tecnico { background:var(--green); }
+
+.stats-strip {
+  display:flex; gap:8px; margin-top:12px; overflow-x:auto; scrollbar-width:none;
+}
+.stats-strip::-webkit-scrollbar { display:none; }
+.stat-card {
+  flex-shrink:0; background:var(--s1); border:1px solid var(--border);
+  border-radius:12px; padding:10px 14px; min-width:90px;
+}
+.stat-num { font-family:'Syne',sans-serif; font-size:22px; font-weight:700; line-height:1; }
+.stat-lbl { font-size:10px; color:var(--text3); margin-top:3px; text-transform:uppercase; letter-spacing:0.5px; }
+
+/* ── TABS ── */
+.tabs {
+  flex-shrink:0; display:flex; background:var(--bg);
+  border-bottom:1px solid var(--border); overflow-x:auto; scrollbar-width:none;
+}
+.tabs::-webkit-scrollbar { display:none; }
+.tab {
+  flex:1; min-width:72px; padding:11px 6px; font-size:11px; font-weight:600;
+  color:var(--text3); cursor:pointer; text-align:center;
+  border-bottom:2px solid transparent; transition:all 0.2s;
+  text-transform:uppercase; letter-spacing:0.5px; user-select:none; white-space:nowrap;
+}
+.tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+/* ── CONTENT ── */
+.content { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:16px 18px 32px; }
+.content.hide { display:none; }
+
+/* ── BOTTOM NAV ── */
+.bottom-nav {
+  flex-shrink:0; display:flex; background:var(--s1);
+  border-top:1px solid var(--border); padding:8px 0 env(safe-area-inset-bottom,12px);
+}
+.nav-item {
+  flex:1; display:flex; flex-direction:column; align-items:center;
+  gap:2px; padding:6px 4px; cursor:pointer; user-select:none;
+}
+.nav-item:active { opacity:0.6; }
+.nav-icon { font-size:19px; line-height:1; }
+.nav-label { font-size:10px; color:var(--text3); transition:color 0.2s; }
+.nav-item.active .nav-label { color:var(--accent); }
+
+/* ── SECTION TITLE ── */
+.sec-title {
+  font-family:'Syne',sans-serif; font-size:13px; font-weight:700;
+  text-transform:uppercase; letter-spacing:1px; color:var(--text2);
+  margin-bottom:12px; margin-top:4px;
+}
+
+/* ── FAB ── */
+.fab {
+  position:fixed; bottom:88px; right:20px;
+  width:52px; height:52px; border-radius:16px;
+  background:var(--accent); color:#0a0b0d; border:none;
+  font-size:26px; cursor:pointer; display:flex;
+  align-items:center; justify-content:center;
+  box-shadow:0 4px 20px rgba(240,165,0,0.35);
+  z-index:50; transition:transform 0.2s, opacity 0.2s;
+}
+.fab:active { transform:scale(0.92); }
+
+/* ── JOB CARD ── */
+.job-card {
+  background:var(--s1); border:1px solid var(--border);
+  border-radius:16px; padding:15px; margin-bottom:10px;
+  position:relative; overflow:hidden; cursor:pointer;
+  transition:border-color 0.2s; animation:fadeUp 0.25s ease;
+}
+.job-card:active { border-color:var(--accent); }
+@keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+.job-card-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; }
+.job-title { font-family:'Syne',sans-serif; font-size:15px; font-weight:700; flex:1; margin-right:10px; line-height:1.3; }
+.status-badge {
+  font-size:10px; font-weight:600; padding:3px 9px;
+  border-radius:20px; white-space:nowrap; text-transform:uppercase; letter-spacing:0.5px;
+}
+.s-pending   { background:rgba(232,124,53,0.15);  color:var(--status-pending); }
+.s-assigned  { background:rgba(74,143,232,0.15);  color:var(--status-assigned); }
+.s-progress  { background:rgba(155,114,232,0.15); color:var(--status-progress); }
+.s-waiting   { background:rgba(232,196,53,0.15);  color:var(--status-waiting); }
+.s-done      { background:rgba(62,207,142,0.15);  color:var(--status-done); }
+.s-closed    { background:rgba(74,79,102,0.2);    color:var(--status-closed); }
+
+.job-client { font-size:12px; color:var(--accent); font-weight:600; margin-bottom:4px; }
+.job-meta { display:flex; gap:10px; flex-wrap:wrap; }
+.job-meta span { font-size:11px; color:var(--text3); display:flex; align-items:center; gap:3px; }
+
+/* ── CLIENT CARD ── */
+.client-card {
+  background:var(--s1); border:1px solid var(--border);
+  border-radius:16px; padding:15px; margin-bottom:10px;
+  cursor:pointer; transition:border-color 0.2s; animation:fadeUp 0.25s ease;
+}
+.client-card:active { border-color:var(--blue); }
+.client-name { font-family:'Syne',sans-serif; font-size:15px; font-weight:700; margin-bottom:5px; }
+.client-meta { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:6px; }
+.client-meta span { font-size:12px; color:var(--text2); }
+.contract-badge {
+  display:inline-flex; align-items:center; gap:5px;
+  font-size:11px; padding:3px 10px; border-radius:20px;
+}
+.contract-ok     { background:rgba(62,207,142,0.12); color:var(--green); }
+.contract-warn   { background:rgba(232,196,53,0.12); color:var(--status-waiting); }
+.contract-danger { background:rgba(232,85,85,0.12);  color:var(--red); }
+
+.client-note {
+  font-size:12px; color:var(--text3); background:var(--s2);
+  border-radius:8px; padding:8px 10px; margin-top:8px;
+  border-left:2px solid var(--border); line-height:1.4;
+}
+
+/* ── MODAL ── */
+.modal-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.75);
+  z-index:200; display:none; align-items:flex-end; justify-content:center;
+}
+.modal-overlay.open { display:flex; }
+.modal {
+  background:var(--s1); border:1px solid var(--border);
+  border-radius:24px 24px 0 0; padding:20px 18px 40px;
+  width:100%; max-width:480px; max-height:90dvh;
+  overflow-y:auto; animation:slideUp 0.28s ease;
+}
+@keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+.modal-handle { width:40px; height:4px; background:var(--border); border-radius:2px; margin:0 auto 18px; }
+.modal-title { font-family:'Syne',sans-serif; font-size:19px; font-weight:800; margin-bottom:16px; }
+
+/* FORM */
+.form-field { margin-bottom:14px; }
+.form-label { font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--text3); display:block; margin-bottom:6px; }
+.form-input, .form-select, .form-textarea {
+  width:100%; background:var(--s2); border:1px solid var(--border);
+  border-radius:10px; padding:11px 13px; color:var(--text);
+  font-family:'DM Sans',sans-serif; font-size:14px; outline:none; transition:border-color 0.2s;
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus { border-color:var(--accent); }
+.form-select { appearance:none; cursor:pointer; }
+.form-textarea { resize:vertical; min-height:80px; }
+
+.form-row { display:flex; gap:10px; }
+.form-row .form-field { flex:1; }
+
+.btn-row { display:flex; gap:10px; margin-top:16px; }
+.btn-sec {
+  flex:1; padding:12px; background:transparent; border:1px solid var(--border);
+  border-radius:12px; color:var(--text2); font-family:'DM Sans',sans-serif;
+  font-size:14px; cursor:pointer; transition:border-color 0.2s;
+}
+.btn-sec:active { opacity:0.7; }
+.btn-pri {
+  flex:2; padding:12px; background:var(--accent); color:#0a0b0d;
+  border:none; border-radius:12px; font-family:'Syne',sans-serif;
+  font-size:14px; font-weight:700; cursor:pointer; transition:opacity 0.2s;
+}
+.btn-pri:active { opacity:0.82; }
+
+/* ── UPLOAD ZONE ── */
+.upload-zone {
+  border:1.5px dashed var(--border); border-radius:12px;
+  padding:20px; text-align:center; cursor:pointer;
+  transition:border-color 0.2s; margin-top:8px;
+}
+.upload-zone:hover { border-color:var(--accent); }
+.upload-zone p { font-size:13px; color:var(--text3); }
+.upload-zone input { display:none; }
+
+.file-list { margin-top:8px; display:flex; flex-direction:column; gap:6px; }
+.file-item {
+  display:flex; align-items:center; gap:8px; background:var(--s2);
+  border:1px solid var(--border); border-radius:8px; padding:8px 10px;
+}
+.file-item span { font-size:12px; color:var(--text2); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.file-item a { font-size:11px; color:var(--blue); text-decoration:none; white-space:nowrap; }
+
+/* ── JOB DETAIL ── */
+.detail-section { margin-bottom:18px; }
+.detail-label { font-size:10px; text-transform:uppercase; letter-spacing:1px; color:var(--text3); margin-bottom:6px; }
+.detail-value { font-size:14px; color:var(--text); line-height:1.5; }
+
+.status-selector { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+.status-btn {
+  padding:6px 12px; border-radius:20px; font-size:11px; font-weight:600;
+  cursor:pointer; border:1.5px solid var(--border); color:var(--text3);
+  text-transform:uppercase; letter-spacing:0.5px; transition:all 0.2s; user-select:none;
+}
+.status-btn.active-s { border-color:currentColor; opacity:1; }
+.status-btn:not(.active-s) { opacity:0.45; }
+
+.progress-log { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+.log-entry {
+  background:var(--s2); border:1px solid var(--border);
+  border-radius:10px; padding:10px 12px;
+}
+.log-entry-top { display:flex; justify-content:space-between; margin-bottom:4px; }
+.log-user { font-size:11px; color:var(--accent); font-weight:600; }
+.log-time { font-size:10px; color:var(--text3); }
+.log-text { font-size:13px; color:var(--text); line-height:1.4; }
+
+/* ── TOAST ── */
+.toast {
+  position:fixed; bottom:80px; left:50%;
+  transform:translateX(-50%) translateY(14px);
+  background:var(--s2); border:1px solid var(--border);
+  border-radius:12px; padding:10px 18px;
+  font-size:13px; color:var(--text);
+  opacity:0; transition:all 0.28s; z-index:999;
+  white-space:nowrap; pointer-events:none;
+}
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+.toast.ok  { border-color:rgba(62,207,142,0.4); }
+.toast.err { border-color:rgba(232,85,85,0.4); }
+
+/* ── DASHBOARD ── */
+.dash-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
+.dash-tile {
+  background:var(--s1); border:1px solid var(--border);
+  border-radius:14px; padding:14px;
+}
+.dash-tile-num { font-family:'Syne',sans-serif; font-size:28px; font-weight:800; line-height:1; }
+.dash-tile-lbl { font-size:11px; color:var(--text3); margin-top:4px; text-transform:uppercase; letter-spacing:0.5px; }
+.dash-tile-accent { color:var(--accent); }
+.dash-tile-blue   { color:var(--blue); }
+.dash-tile-green  { color:var(--green); }
+.dash-tile-red    { color:var(--red); }
+
+.alert-card {
+  background:rgba(232,85,85,0.08); border:1px solid rgba(232,85,85,0.25);
+  border-radius:14px; padding:14px; margin-bottom:10px;
+}
+.alert-card-title { font-size:13px; font-weight:600; color:var(--red); margin-bottom:4px; }
+.alert-card-text  { font-size:12px; color:var(--text2); line-height:1.4; }
+
+.warn-card {
+  background:rgba(232,196,53,0.08); border:1px solid rgba(232,196,53,0.25);
+  border-radius:14px; padding:14px; margin-bottom:10px;
+}
+.warn-card-title { font-size:13px; font-weight:600; color:var(--status-waiting); margin-bottom:4px; }
+.warn-card-text  { font-size:12px; color:var(--text2); line-height:1.4; }
+
+/* ── FILTER BAR ── */
+.filter-bar { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; margin-bottom:14px; }
+.filter-bar::-webkit-scrollbar { display:none; }
+.f-chip {
+  padding:5px 12px; border-radius:20px; font-size:12px; font-weight:500;
+  cursor:pointer; border:1.5px solid var(--border); color:var(--text2);
+  white-space:nowrap; background:transparent; transition:all 0.2s; user-select:none;
+}
+.f-chip.active { border-color:var(--accent); color:var(--accent); background:rgba(240,165,0,0.08); }
+
+/* ── SETUP NOTICE ── */
+.setup-notice {
+  background:rgba(240,165,0,0.08); border:1.5px solid rgba(240,165,0,0.3);
+  border-radius:16px; padding:18px; margin-bottom:16px;
+}
+.setup-notice h3 { font-family:'Syne',sans-serif; font-size:14px; color:var(--accent); margin-bottom:8px; }
+.setup-notice p  { font-size:12px; color:var(--text2); line-height:1.6; margin-bottom:6px; }
+.setup-notice code {
+  font-family:'DM Mono',monospace; font-size:11px;
+  background:var(--s2); padding:2px 6px; border-radius:4px; color:var(--accent2);
+}
+
+.empty-state { text-align:center; padding:40px 16px; color:var(--text3); }
+.empty-icon  { font-size:36px; margin-bottom:12px; }
+.empty-text  { font-size:13px; line-height:1.6; }
+</style>
+</head>
+<body>
+
+<!-- ── LOGIN ───────────────────────────────────────────────────────────────── -->
+<div id="loginScreen">
+  <div class="login-logo">LDA</div>
+  <div class="login-sub">Grupo Los Dos Abuelos · Mantenimiento</div>
+  <div class="login-card">
+    <h2>Iniciar sesión</h2>
+    <div class="field">
+      <label>Correo</label>
+      <input type="email" id="loginEmail" placeholder="correo@empresa.com" autocomplete="email">
+    </div>
+    <div class="field">
+      <label>Contraseña</label>
+      <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn-primary" id="btnLogin">Entrar</button>
+    <div class="login-err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- ── MAIN APP ─────────────────────────────────────────────────────────────── -->
+<div id="mainApp" style="display:none; flex-direction:column; height:100dvh;">
+
+  <div class="header">
+    <div class="header-row">
+      <div>
+        <div class="header-title">LDA Mantenimiento</div>
+        <div class="header-sub">Grupo Los Dos Abuelos</div>
+      </div>
+      <div class="user-badge" onclick="doSignOut()">
+        <div class="role-dot" id="roleDot"></div>
+        <span id="userLabel">—</span>
+      </div>
+    </div>
+    <div class="stats-strip" id="statsStrip">
+      <div class="stat-card"><div class="stat-num" id="st-active" style="color:var(--blue)">—</div><div class="stat-lbl">Activos</div></div>
+      <div class="stat-card"><div class="stat-num" id="st-pending" style="color:var(--orange)">—</div><div class="stat-lbl">Pendientes</div></div>
+      <div class="stat-card"><div class="stat-num" id="st-done" style="color:var(--green)">—</div><div class="stat-lbl">Completados</div></div>
+      <div class="stat-card"><div class="stat-num" id="st-clients" style="color:var(--accent)">—</div><div class="stat-lbl">Clientes</div></div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="dashboard">📊 Dashboard</div>
+    <div class="tab" data-tab="trabajos">🔧 Trabajos</div>
+    <div class="tab" data-tab="clientes">👥 Clientes</div>
+    <div class="tab admin-only" data-tab="equipo" style="display:none">👤 Equipo</div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="content" id="tab-dashboard">
+    <div id="setupNotice" style="display:none">
+      <div class="setup-notice">
+        <h3>⚙️ Conectar Firebase</h3>
+        <p>Para activar sincronización en tiempo real, ve a <strong>console.firebase.google.com</strong>, crea un proyecto gratis y reemplaza la configuración al inicio del archivo HTML.</p>
+        <p>Mientras tanto, la app funciona en modo <strong>demo local</strong> con datos de ejemplo.</p>
+      </div>
+    </div>
+    <div class="dash-grid" id="dashGrid"></div>
+    <div class="sec-title">⚠️ Alertas de Contratos</div>
+    <div id="contractAlerts"></div>
+    <div class="sec-title">🔧 Trabajos Recientes</div>
+    <div id="recentJobs"></div>
+  </div>
+
+  <!-- TRABAJOS -->
+  <div class="content hide" id="tab-trabajos">
+    <div class="filter-bar" id="jobsFilter">
+      <div class="f-chip active" data-f="all">Todos</div>
+      <div class="f-chip" data-f="Pendiente">Pendiente</div>
+      <div class="f-chip" data-f="Asignado">Asignado</div>
+      <div class="f-chip" data-f="En Progreso">En Progreso</div>
+      <div class="f-chip" data-f="En Espera">En Espera</div>
+      <div class="f-chip" data-f="Completado">Completado</div>
+      <div class="f-chip" data-f="Cerrado">Cerrado</div>
+    </div>
+    <div id="jobsList"></div>
+  </div>
+
+  <!-- CLIENTES -->
+  <div class="content hide" id="tab-clientes">
+    <div id="clientsList"></div>
+  </div>
+
+  <!-- EQUIPO (admin only) -->
+  <div class="content hide" id="tab-equipo">
+    <div id="teamList"></div>
+  </div>
+
+  <div class="bottom-nav">
+    <div class="nav-item active" data-nav="dashboard"><span class="nav-icon">📊</span><span class="nav-label">Dashboard</span></div>
+    <div class="nav-item" data-nav="trabajos"><span class="nav-icon">🔧</span><span class="nav-label">Trabajos</span></div>
+    <div class="nav-item" data-nav="clientes"><span class="nav-icon">👥</span><span class="nav-label">Clientes</span></div>
+    <div class="nav-item admin-only" data-nav="equipo" style="display:none"><span class="nav-icon">👤</span><span class="nav-label">Equipo</span></div>
+  </div>
+
+  <button class="fab" id="fabBtn" onclick="openFab()">+</button>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- ── MODAL: NEW JOB ─────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modalNewJob">
+<div class="modal">
+  <div class="modal-handle"></div>
+  <div class="modal-title">Nuevo Trabajo</div>
+  <div class="form-field">
+    <label class="form-label">Título del trabajo *</label>
+    <input type="text" class="form-input" id="jTitle" placeholder="Ej: Revisión sistema eléctrico">
+  </div>
+  <div class="form-field">
+    <label class="form-label">Cliente *</label>
+    <select class="form-select" id="jClient"></select>
+  </div>
+  <div class="form-row">
+    <div class="form-field">
+      <label class="form-label">Fecha</label>
+      <input type="date" class="form-input" id="jDate">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Prioridad</label>
+      <select class="form-select" id="jPriority">
+        <option>Normal</option>
+        <option>Alta</option>
+        <option>Urgente</option>
+      </select>
+    </div>
+  </div>
+  <div class="form-field admin-only" id="assignField">
+    <label class="form-label">Asignar técnico</label>
+    <select class="form-select" id="jTech"></select>
+  </div>
+  <div class="form-field">
+    <label class="form-label">Descripción</label>
+    <textarea class="form-textarea" id="jDesc" placeholder="Describe el trabajo a realizar..."></textarea>
+  </div>
+  <div class="form-field">
+    <label class="form-label">Origen</label>
+    <select class="form-select" id="jOrigin">
+      <option>Llamada del cliente</option>
+      <option>Visita programada</option>
+      <option>Contrato de mantenimiento</option>
+      <option>Emergencia</option>
+      <option>Cotización aprobada</option>
+    </select>
+  </div>
+  <div class="btn-row">
+    <button class="btn-sec" onclick="closeModal('modalNewJob')">Cancelar</button>
+    <button class="btn-pri" onclick="saveJob()">Crear Trabajo</button>
+  </div>
+</div>
+</div>
+
+<!-- ── MODAL: JOB DETAIL ─────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modalJobDetail">
+<div class="modal">
+  <div class="modal-handle"></div>
+  <div id="jobDetailContent"></div>
+</div>
+</div>
+
+<!-- ── MODAL: NEW CLIENT ─────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modalNewClient">
+<div class="modal">
+  <div class="modal-handle"></div>
+  <div class="modal-title">Nuevo Cliente</div>
+  <div class="form-field">
+    <label class="form-label">Nombre / Empresa *</label>
+    <input type="text" class="form-input" id="cName" placeholder="Nombre del cliente">
+  </div>
+  <div class="form-row">
+    <div class="form-field">
+      <label class="form-label">Contacto</label>
+      <input type="text" class="form-input" id="cContact" placeholder="Nombre">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Teléfono</label>
+      <input type="text" class="form-input" id="cPhone" placeholder="+507">
+    </div>
+  </div>
+  <div class="form-field">
+    <label class="form-label">Correo</label>
+    <input type="email" class="form-input" id="cEmail" placeholder="correo@cliente.com">
+  </div>
+  <div class="form-field">
+    <label class="form-label">Tipo de contrato</label>
+    <select class="form-select" id="cContract">
+      <option value="none">Sin contrato</option>
+      <option value="annual">Contrato anual</option>
+      <option value="monthly">Contrato mensual</option>
+    </select>
+  </div>
+  <div class="form-field" id="contractDateField">
+    <label class="form-label">Fecha vencimiento contrato</label>
+    <input type="date" class="form-input" id="cContractDate">
+  </div>
+  <div class="form-field">
+    <label class="form-label">Notas del cliente</label>
+    <textarea class="form-textarea" id="cNotes" placeholder="Ej: Solo atender después de las 2pm los sábados. Enviar lista de técnicos con cédula 5 días antes..."></textarea>
+  </div>
+  <div class="btn-row">
+    <button class="btn-sec" onclick="closeModal('modalNewClient')">Cancelar</button>
+    <button class="btn-pri" onclick="saveClient()">Guardar Cliente</button>
+  </div>
+</div>
+</div>
+
+<!-- ── MODAL: PROGRESS UPDATE ────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modalProgress">
+<div class="modal">
+  <div class="modal-handle"></div>
+  <div class="modal-title">Registrar Avance</div>
+  <div class="form-field">
+    <label class="form-label">Descripción del avance *</label>
+    <textarea class="form-textarea" id="progText" placeholder="Describe qué se hizo, materiales usados, observaciones..."></textarea>
+  </div>
+  <div class="form-field">
+    <label class="form-label">Fotos / Documentos / Facturas</label>
+    <div class="upload-zone" onclick="document.getElementById('progFiles').click()">
+      <p>📎 Toca para subir fotos o documentos</p>
+      <input type="file" id="progFiles" multiple accept="image/*,.pdf,.doc,.docx">
+    </div>
+    <div class="file-list" id="progFileList"></div>
+  </div>
+  <div class="btn-row">
+    <button class="btn-sec" onclick="closeModal('modalProgress')">Cancelar</button>
+    <button class="btn-pri" onclick="saveProgress()">Guardar Avance</button>
+  </div>
+</div>
+</div>
+
+<script>
+// ── STATE ────────────────────────────────────────────────────────────────────
+let currentUser  = null;
+let currentRole  = null; // 'admin' | 'supervisor' | 'tecnico'
+let currentUid   = null;
+let currentName  = '';
+
+let jobs    = [];
+let clients = [];
+let team    = [];
+
+let activeTab    = 'dashboard';
+let jobFilter    = 'all';
+let activeJobId  = null;
+let pendingFiles = [];
+
+// ── DEMO DATA (used when Firebase not configured) ────────────────────────────
+const DEMO_MODE = false; // set false once Firebase is configured
+
+const demoClients = [
+  { id:'c1', name:'Oficentro Las Mercedes', contact:'Ing. Rodriguez', phone:'+507 6000-1111', email:'admin@mercedes.com', contract:'annual', contractDate:'2025-06-15', notes:'Enviar lista de técnicos con cédula 5 días antes de cada visita.', jobCount:8 },
+  { id:'c2', name:'Plaza Istmo', contact:'Sra. Barría', phone:'+507 6000-2222', email:'barria@plazaistmo.com', contract:'annual', contractDate:'2025-03-30', notes:'Solo atender después de las 2pm los sábados. Solicitar permiso a seguridad.', jobCount:3 },
+  { id:'c3', name:'Torre Global Bank', contact:'Sr. Morales', phone:'+507 6000-3333', email:'morales@globalbank.com', contract:'monthly', contractDate:'2025-02-28', notes:'', jobCount:12 },
+  { id:'c4', name:'Hotel Riande', contact:'Gerencia', phone:'+507 6000-4444', email:'mtto@riande.com', contract:'none', contractDate:'', notes:'Cliente frecuente, trato preferencial.', jobCount:5 },
+];
+
+const demoJobs = [
+  { id:'j1', title:'Revisión sistema eléctrico general', clientId:'c1', clientName:'Oficentro Las Mercedes', status:'En Progreso', priority:'Alta', date:'2025-02-20', assignedTo:'Carlos Méndez', origin:'Contrato de mantenimiento', description:'Revisión completa del tablero eléctrico principal y circuitos secundarios.', logs:[ { user:'Carlos Méndez', text:'Iniciada revisión del tablero principal. Se detectaron 3 breakers en mal estado.', ts:'2025-02-20 09:15' }, { user:'Carlos Méndez', text:'Reemplazo de breakers completado. Pendiente verificación de circuito 4.', ts:'2025-02-20 14:30' } ], files:[] },
+  { id:'j2', title:'Mantenimiento A/C piso 3', clientId:'c2', clientName:'Plaza Istmo', status:'Pendiente', priority:'Normal', date:'2025-02-23', assignedTo:'', origin:'Llamada del cliente', description:'Limpieza y revisión de unidades de A/C en el tercer piso.', logs:[], files:[] },
+  { id:'j3', title:'Reparación tubería baño ejecutivo', clientId:'c3', clientName:'Torre Global Bank', status:'Completado', priority:'Urgente', date:'2025-02-18', assignedTo:'Mario Palma', origin:'Emergencia', description:'Fuga de agua en baño del piso 12.', logs:[ { user:'Mario Palma', text:'Reparación completada. Se cambió sección de tubería de 2 metros.', ts:'2025-02-18 11:00' } ], files:[] },
+  { id:'j4', title:'Pintura lobby principal', clientId:'c4', clientName:'Hotel Riande', status:'En Espera', priority:'Normal', date:'2025-02-25', assignedTo:'Pedro Ríos', origin:'Cotización aprobada', description:'Pintura completa del lobby. En espera de que lleguen los materiales.', logs:[ { user:'Pedro Ríos', text:'Materiales pedidos. ETA: jueves 22.', ts:'2025-02-19 10:00' } ], files:[] },
+];
+
+const demoTeam = [
+  { id:'u1', name:'Waldo', email:'waldo@ldagroup.com', role:'admin' },
+  { id:'u2', name:'Carlos Méndez', email:'carlos@ldagroup.com', role:'tecnico' },
+  { id:'u3', name:'Mario Palma', email:'mario@ldagroup.com', role:'tecnico' },
+  { id:'u4', name:'Pedro Ríos', email:'pedro@ldagroup.com', role:'supervisor' },
+];
+
+// ── WAIT FOR FIREBASE ────────────────────────────────────────────────────────
+window.addEventListener('firebase-ready', initFirebase);
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    if (!window._fb) initDemoMode();
+  }, 2000);
+});
+
+function initDemoMode() {
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('btnLogin').onclick = () => {
+    const email = document.getElementById('loginEmail').value.trim();
+    const pass  = document.getElementById('loginPass').value;
+    // Demo login
+    const user = demoTeam.find(u => u.email === email);
+    if (user && pass === 'demo123') {
+      startSession(user.id, user.name, user.role, user.email);
+    } else {
+      document.getElementById('loginErr').textContent = 'Credenciales incorrectas. (Demo: usa demo123)';
+    }
+  };
+}
+
+function initFirebase() {
+  const { auth, onAuthStateChanged } = window._fb;
+  document.getElementById('btnLogin').onclick = doLogin;
+
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      // Load user profile from Firestore
+      const { db, doc, getDoc } = window._fb;
+      const snap = await getDoc(doc(db, 'users', user.uid));
+      if (snap.exists()) {
+        const profile = snap.data();
+        startSession(user.uid, profile.name || user.email, profile.role || 'tecnico', user.email);
+      } else {
+        startSession(user.uid, user.email, 'tecnico', user.email);
+      }
+    } else {
+      showLogin();
+    }
+  });
+}
+
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass  = document.getElementById('loginPass').value;
+  document.getElementById('loginErr').textContent = '';
+  try {
+    const { auth, signInWithEmailAndPassword } = window._fb;
+    await signInWithEmailAndPassword(auth, email, pass);
+  } catch(e) {
+    document.getElementById('loginErr').textContent = 'Correo o contraseña incorrectos.';
+  }
+}
+
+async function doSignOut() {
+  if (DEMO_MODE || !window._fb) { showLogin(); return; }
+  const { auth, signOut } = window._fb;
+  await signOut(auth);
+  showLogin();
+}
+
+function showLogin() {
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('mainApp').style.display = 'none';
+}
+
+function startSession(uid, name, role, email) {
+  currentUid  = uid;
+  currentName = name;
+  currentRole = role;
+
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'flex';
+
+  // Update UI for role
+  document.getElementById('userLabel').textContent = name + ' · ' + role;
+  const dot = document.getElementById('roleDot');
+  dot.className = 'role-dot ' + (role === 'admin' ? '' : role);
+
+  // Show admin tabs
+  const isPrivileged = role === 'admin' || role === 'supervisor';
+  document.querySelectorAll('.admin-only').forEach(el => {
+    el.style.display = isPrivileged ? '' : 'none';
+  });
+
+  if (DEMO_MODE || !window._fb) {
+    jobs    = demoJobs;
+    clients = demoClients;
+    team    = demoTeam;
+    renderAll();
+    document.getElementById('setupNotice').style.display = 'block';
+  } else {
+    loadFirestoreData();
+  }
+
+  bindAll();
+}
+
+// ── FIRESTORE LISTENERS ──────────────────────────────────────────────────────
+function loadFirestoreData() {
+  const { db, collection, onSnapshot, query, orderBy } = window._fb;
+
+  onSnapshot(query(collection(db,'jobs'), orderBy('createdAt','desc')), snap => {
+    jobs = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    renderAll();
+  });
+
+  onSnapshot(collection(db,'clients'), snap => {
+    clients = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    renderAll();
+  });
+
+  onSnapshot(collection(db,'users'), snap => {
+    team = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+    renderAll();
+  });
+}
+
+// ── BIND ─────────────────────────────────────────────────────────────────────
+function bindAll() {
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+  document.querySelectorAll('.nav-item').forEach(n => n.addEventListener('click', () => switchTab(n.dataset.nav)));
+
+  document.getElementById('jobsFilter').addEventListener('click', e => {
+    const chip = e.target.closest('.f-chip');
+    if (!chip) return;
+    document.querySelectorAll('#jobsFilter .f-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    jobFilter = chip.dataset.f;
+    renderJobs();
+  });
+
+  document.getElementById('cContract').addEventListener('change', () => {
+    document.getElementById('contractDateField').style.display =
+      document.getElementById('cContract').value === 'none' ? 'none' : '';
+  });
+
+  document.getElementById('progFiles').addEventListener('change', e => {
+    pendingFiles = Array.from(e.target.files);
+    const list = document.getElementById('progFileList');
+    list.innerHTML = pendingFiles.map(f => `
+      <div class="file-item"><span>📎 ${f.name}</span><span style="font-size:11px;color:var(--text3)">${(f.size/1024).toFixed(0)}kb</span></div>
+    `).join('');
+  });
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.nav === tab));
+  document.querySelectorAll('.content').forEach(c => c.classList.toggle('hide', c.id !== 'tab-' + tab));
+  renderAll();
+}
+
+// ── FAB ──────────────────────────────────────────────────────────────────────
+function openFab() {
+  if (activeTab === 'clientes' && (currentRole === 'admin' || currentRole === 'supervisor')) {
+    openModal('modalNewClient');
+  } else if (activeTab !== 'equipo') {
+    populateJobModal();
+    openModal('modalNewJob');
+  }
+}
+
+// ── RENDER ALL ───────────────────────────────────────────────────────────────
+function renderAll() {
+  renderDashboard();
+  renderJobs();
+  renderClients();
+  renderTeam();
+  updateHeaderStats();
+}
+
+// ── DASHBOARD ────────────────────────────────────────────────────────────────
+function renderDashboard() {
+  const active  = jobs.filter(j => ['En Progreso','Asignado'].includes(j.status)).length;
+  const pending = jobs.filter(j => j.status === 'Pendiente').length;
+  const done    = jobs.filter(j => j.status === 'Completado').length;
+  const waiting = jobs.filter(j => j.status === 'En Espera').length;
+
+  document.getElementById('dashGrid').innerHTML = `
+    <div class="dash-tile"><div class="dash-tile-num dash-tile-blue">${active}</div><div class="dash-tile-lbl">En Progreso</div></div>
+    <div class="dash-tile"><div class="dash-tile-num dash-tile-accent">${pending}</div><div class="dash-tile-lbl">Pendientes</div></div>
+    <div class="dash-tile"><div class="dash-tile-num dash-tile-green">${done}</div><div class="dash-tile-lbl">Completados</div></div>
+    <div class="dash-tile"><div class="dash-tile-num" style="color:var(--status-waiting)">${waiting}</div><div class="dash-tile-lbl">En Espera</div></div>
+  `;
+
+  // Contract alerts
+  const today = new Date();
+  const alertEl = document.getElementById('contractAlerts');
+  const contractClients = clients.filter(c => c.contract && c.contract !== 'none' && c.contractDate);
+  const alerts = contractClients.map(c => {
+    const exp = new Date(c.contractDate);
+    const diffDays = Math.ceil((exp - today) / (1000*60*60*24));
+    return { ...c, diffDays };
+  }).filter(c => c.diffDays <= 30).sort((a,b) => a.diffDays - b.diffDays);
+
+  if (!alerts.length) {
+    alertEl.innerHTML = `<div class="empty-state" style="padding:16px"><div class="empty-text">✅ Sin contratos por vencer en los próximos 30 días</div></div>`;
+  } else {
+    alertEl.innerHTML = alerts.map(c => {
+      const isExpired = c.diffDays < 0;
+      const isCritical = c.diffDays <= 7;
+      const cls = isExpired ? 'alert-card' : isCritical ? 'alert-card' : 'warn-card';
+      const tcls = isExpired ? 'alert-card-title' : isCritical ? 'alert-card-title' : 'warn-card-title';
+      const bcls = isExpired ? 'alert-card-text' : 'warn-card-text';
+      const msg = isExpired ? `⚠️ Contrato VENCIDO (hace ${Math.abs(c.diffDays)} días)` :
+                  `📅 Vence en ${c.diffDays} días · ${c.contractDate}`;
+      return `<div class="${cls}" onclick="openClientDetail('${c.id}')">
+        <div class="${tcls}">${c.name}</div>
+        <div class="${bcls}">${msg} · ${c.contact || ''}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Recent jobs
+  const recent = [...jobs].sort((a,b) => (b.date||'').localeCompare(a.date||'')).slice(0,4);
+  document.getElementById('recentJobs').innerHTML = recent.length
+    ? recent.map(j => jobCardHTML(j)).join('')
+    : `<div class="empty-state"><div class="empty-icon">🔧</div><div class="empty-text">Sin trabajos aún</div></div>`;
+}
+
+function updateHeaderStats() {
+  document.getElementById('st-active').textContent  = jobs.filter(j=>['En Progreso','Asignado'].includes(j.status)).length;
+  document.getElementById('st-pending').textContent = jobs.filter(j=>j.status==='Pendiente').length;
+  document.getElementById('st-done').textContent    = jobs.filter(j=>j.status==='Completado').length;
+  document.getElementById('st-clients').textContent = clients.length;
+}
+
+// ── JOBS ─────────────────────────────────────────────────────────────────────
+function renderJobs() {
+  let list = [...jobs];
+  if (currentRole === 'tecnico') list = list.filter(j => j.assignedTo === currentName);
+  if (jobFilter !== 'all') list = list.filter(j => j.status === jobFilter);
+  list.sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const el = document.getElementById('jobsList');
+  el.innerHTML = list.length
+    ? list.map(j => jobCardHTML(j)).join('')
+    : `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">Sin trabajos en esta categoría</div></div>`;
+}
+
+function jobCardHTML(j) {
+  const sc = statusClass(j.status);
+  return `<div class="job-card" onclick="openJobDetail('${j.id}')">
+    <div class="job-card-top">
+      <div class="job-title">${j.title}</div>
+      <div class="status-badge ${sc}">${j.status}</div>
+    </div>
+    <div class="job-client">👤 ${j.clientName || '—'}</div>
+    <div class="job-meta">
+      ${j.date ? `<span>📅 ${j.date}</span>` : ''}
+      ${j.assignedTo ? `<span>🔧 ${j.assignedTo}</span>` : '<span style="color:var(--orange)">⚠️ Sin asignar</span>'}
+      ${j.priority !== 'Normal' ? `<span style="color:var(--red)">🔴 ${j.priority}</span>` : ''}
+      ${(j.logs||[]).length ? `<span>💬 ${j.logs.length} avances</span>` : ''}
+    </div>
+  </div>`;
+}
+
+function statusClass(s) {
+  const m = { 'Pendiente':'s-pending','Asignado':'s-assigned','En Progreso':'s-progress',
+              'En Espera':'s-waiting','Completado':'s-done','Cerrado':'s-closed' };
+  return m[s] || 's-pending';
+}
+
+// ── CLIENTS ──────────────────────────────────────────────────────────────────
+function renderClients() {
+  const el = document.getElementById('clientsList');
+  if (!clients.length) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">👥</div><div class="empty-text">Sin clientes aún.<br>Toca + para agregar.</div></div>`;
+    return;
+  }
+  el.innerHTML = clients.map(c => {
+    const today = new Date();
+    let contractBadge = '';
+    if (c.contract && c.contract !== 'none' && c.contractDate) {
+      const exp = new Date(c.contractDate);
+      const diff = Math.ceil((exp - today) / (1000*60*60*24));
+      const cls = diff < 0 ? 'contract-danger' : diff <= 30 ? 'contract-warn' : 'contract-ok';
+      const lbl = diff < 0 ? '⚠️ Vencido' : diff <= 30 ? `⏰ Vence en ${diff}d` : `✅ Vigente`;
+      contractBadge = `<div class="contract-badge ${cls}">${lbl} · ${c.contractDate}</div>`;
+    }
+    const jobCount = jobs.filter(j => j.clientId === c.id).length;
+    return `<div class="client-card" onclick="openClientDetail('${c.id}')">
+      <div class="client-name">${c.name}</div>
+      <div class="client-meta">
+        ${c.contact ? `<span>👤 ${c.contact}</span>` : ''}
+        ${c.phone   ? `<span>📱 ${c.phone}</span>` : ''}
+        <span>🔧 ${jobCount} trabajos</span>
+      </div>
+      ${contractBadge}
+      ${c.notes ? `<div class="client-note">📌 ${c.notes}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// ── TEAM ─────────────────────────────────────────────────────────────────────
+function renderTeam() {
+  if (currentRole !== 'admin' && currentRole !== 'supervisor') return;
+  const el = document.getElementById('teamList');
+  if (!team.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="sec-title">Equipo</div>` + team.map(u => `
+    <div class="client-card">
+      <div class="client-name">${u.name}</div>
+      <div class="client-meta">
+        <span>${u.email}</span>
+        <span style="color:var(${u.role==='admin'?'--accent':u.role==='supervisor'?'--blue':'--green'})">${u.role}</span>
+      </div>
+      <div class="client-meta">
+        <span>🔧 ${jobs.filter(j=>j.assignedTo===u.name&&j.status==='En Progreso').length} activos</span>
+        <span>✅ ${jobs.filter(j=>j.assignedTo===u.name&&j.status==='Completado').length} completados</span>
+      </div>
+    </div>`).join('');
+}
+
+// ── JOB DETAIL ───────────────────────────────────────────────────────────────
+function openJobDetail(id) {
+  activeJobId = id;
+  const j = jobs.find(x => x.id === id);
+  if (!j) return;
+  const isPrivileged = currentRole === 'admin' || currentRole === 'supervisor';
+
+  const statuses = ['Pendiente','Asignado','En Progreso','En Espera','Completado','Cerrado'];
+  const statusBtns = isPrivileged ? statuses.map(s => `
+    <div class="status-btn ${statusClass(s)} ${j.status===s?'active-s':''}" onclick="changeStatus('${id}','${s}')">${s}</div>
+  `).join('') : `<div class="status-badge ${statusClass(j.status)}" style="display:inline-flex">${j.status}</div>`;
+
+  const logs = (j.logs||[]).map(l => `
+    <div class="log-entry">
+      <div class="log-entry-top"><span class="log-user">${l.user}</span><span class="log-time">${l.ts}</span></div>
+      <div class="log-text">${l.text}</div>
+    </div>`).join('') || '<div style="font-size:13px;color:var(--text3)">Sin avances registrados aún.</div>';
+
+  const files = (j.files||[]).map(f => `
+    <div class="file-item"><span>${f.name}</span><a href="${f.url}" target="_blank">Ver →</a></div>
+  `).join('') || '';
+
+  document.getElementById('jobDetailContent').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+      <div class="modal-title" style="margin-bottom:0;font-size:16px;flex:1;margin-right:10px">${j.title}</div>
+      <div class="status-badge ${statusClass(j.status)}">${j.status}</div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-label">Cliente</div>
+      <div class="detail-value" style="color:var(--accent)">${j.clientName}</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div><div class="detail-label">Fecha</div><div class="detail-value">${j.date||'—'}</div></div>
+      <div><div class="detail-label">Prioridad</div><div class="detail-value">${j.priority}</div></div>
+      <div><div class="detail-label">Técnico</div><div class="detail-value">${j.assignedTo||'Sin asignar'}</div></div>
+      <div><div class="detail-label">Origen</div><div class="detail-value">${j.origin||'—'}</div></div>
+    </div>
+
+    ${j.description ? `<div class="detail-section"><div class="detail-label">Descripción</div><div class="detail-value">${j.description}</div></div>` : ''}
+
+    ${isPrivileged ? `<div class="detail-section"><div class="detail-label">Cambiar Estado</div><div class="status-selector">${statusBtns}</div></div>` : `<div class="detail-section"><div class="detail-label">Estado</div>${statusBtns}</div>`}
+
+    <div class="detail-section">
+      <div class="detail-label">Avances (${(j.logs||[]).length})</div>
+      <div class="progress-log">${logs}</div>
+    </div>
+
+    ${files ? `<div class="detail-section"><div class="detail-label">Archivos</div><div class="file-list">${files}</div></div>` : ''}
+
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn-sec" onclick="closeModal('modalJobDetail')">Cerrar</button>
+      <button class="btn-pri" onclick="closeModal('modalJobDetail');openModal('modalProgress')">+ Avance</button>
+    </div>
+    ${isPrivileged ? `<button onclick="generatePDF('${id}')" style="width:100%;margin-top:8px;padding:11px;background:rgba(74,143,232,0.12);border:1px solid rgba(74,143,232,0.3);border-radius:12px;color:var(--blue);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;font-weight:600">📄 Generar Reporte PDF</button>` : ''}
+  `;
+
+  openModal('modalJobDetail');
+}
+
+function changeStatus(id, status) {
+  const j = jobs.find(x => x.id === id);
+  if (!j) return;
+  j.status = status;
+
+  if (!DEMO_MODE && window._fb) {
+    const { db, doc, updateDoc } = window._fb;
+    updateDoc(doc(db,'jobs',id), { status });
+  }
+
+  openJobDetail(id); // refresh detail
+  renderAll();
+  showToast('Estado actualizado: ' + status, 'ok');
+}
+
+// ── CLIENT DETAIL ────────────────────────────────────────────────────────────
+function openClientDetail(id) {
+  const c = clients.find(x => x.id === id);
+  if (!c) return;
+  const clientJobs = jobs.filter(j => j.clientId === id);
+  showToast(`${c.name} · ${clientJobs.length} trabajos`, 'ok');
+}
+
+// ── SAVE JOB ─────────────────────────────────────────────────────────────────
+function populateJobModal() {
+  const clientSel = document.getElementById('jClient');
+  clientSel.innerHTML = clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+  const techSel = document.getElementById('jTech');
+  techSel.innerHTML = '<option value="">Sin asignar</option>' +
+    team.filter(u => u.role !== 'admin').map(u => `<option value="${u.name}">${u.name} (${u.role})</option>`).join('');
+
+  document.getElementById('jDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('assignField').style.display = currentRole !== 'tecnico' ? '' : 'none';
+}
+
+async function saveJob() {
+  const title = document.getElementById('jTitle').value.trim();
+  if (!title) { showToast('Escribe el título del trabajo', 'err'); return; }
+
+  const clientId  = document.getElementById('jClient').value;
+  const clientObj = clients.find(c => c.id === clientId);
+
+  const job = {
+    title,
+    clientId,
+    clientName: clientObj?.name || '',
+    date:       document.getElementById('jDate').value,
+    priority:   document.getElementById('jPriority').value,
+    assignedTo: currentRole === 'tecnico' ? currentName : (document.getElementById('jTech').value || ''),
+    status:     document.getElementById('jTech').value ? 'Asignado' : 'Pendiente',
+    origin:     document.getElementById('jOrigin').value,
+    description:document.getElementById('jDesc').value,
+    logs:       [],
+    files:      [],
+    createdBy:  currentName,
+  };
+
+  if (DEMO_MODE || !window._fb) {
+    job.id = 'j' + Date.now();
+    jobs.unshift(job);
+  } else {
+    const { db, collection, addDoc, serverTimestamp } = window._fb;
+    await addDoc(collection(db,'jobs'), { ...job, createdAt: serverTimestamp() });
+  }
+
+  closeModal('modalNewJob');
+  document.getElementById('jTitle').value = '';
+  document.getElementById('jDesc').value  = '';
+  renderAll();
+  showToast('✅ Trabajo creado', 'ok');
+}
+
+// ── SAVE CLIENT ───────────────────────────────────────────────────────────────
+async function saveClient() {
+  const name = document.getElementById('cName').value.trim();
+  if (!name) { showToast('Escribe el nombre del cliente', 'err'); return; }
+
+  const client = {
+    name,
+    contact:      document.getElementById('cContact').value,
+    phone:        document.getElementById('cPhone').value,
+    email:        document.getElementById('cEmail').value,
+    contract:     document.getElementById('cContract').value,
+    contractDate: document.getElementById('cContractDate').value,
+    notes:        document.getElementById('cNotes').value,
+    jobCount:     0,
+  };
+
+  if (DEMO_MODE || !window._fb) {
+    client.id = 'c' + Date.now();
+    clients.push(client);
+  } else {
+    const { db, collection, addDoc } = window._fb;
+    await addDoc(collection(db,'clients'), client);
+  }
+
+  closeModal('modalNewClient');
+  ['cName','cContact','cPhone','cEmail','cNotes','cContractDate'].forEach(id => document.getElementById(id).value = '');
+  renderAll();
+  showToast('✅ Cliente guardado', 'ok');
+}
+
+// ── SAVE PROGRESS ─────────────────────────────────────────────────────────────
+async function saveProgress() {
+  if (!activeJobId) return;
+  const text = document.getElementById('progText').value.trim();
+  if (!text) { showToast('Describe el avance', 'err'); return; }
+
+  const now = new Date();
+  const ts  = now.toLocaleDateString('es-PA') + ' ' + now.toTimeString().slice(0,5);
+
+  const logEntry = { user: currentName, text, ts };
+
+  // Handle file uploads
+  const uploadedFiles = [];
+  if (!DEMO_MODE && window._fb && pendingFiles.length) {
+    for (const file of pendingFiles) {
+      try {
+        const { storage, ref, uploadBytes, getDownloadURL } = window._fb;
+        const r = ref(storage, `jobs/${activeJobId}/${Date.now()}_${file.name}`);
+        await uploadBytes(r, file);
+        const url = await getDownloadURL(r);
+        uploadedFiles.push({ name: file.name, url });
+      } catch(e) { console.error('Upload error:', e); }
+    }
+  }
+
+  const job = jobs.find(j => j.id === activeJobId);
+  if (job) {
+    job.logs = [...(job.logs||[]), logEntry];
+    job.files = [...(job.files||[]), ...uploadedFiles];
+    if (job.status === 'Asignado') job.status = 'En Progreso';
+  }
+
+  if (!DEMO_MODE && window._fb) {
+    const { db, doc, updateDoc } = window._fb;
+    await updateDoc(doc(db,'jobs',activeJobId), {
+      logs: job.logs, files: job.files, status: job.status
+    });
+  }
+
+  closeModal('modalProgress');
+  document.getElementById('progText').value = '';
+  document.getElementById('progFileList').innerHTML = '';
+  pendingFiles = [];
+  renderAll();
+  showToast('✅ Avance registrado', 'ok');
+}
+
+// ── PDF REPORT ────────────────────────────────────────────────────────────────
+function generatePDF(id) {
+  const j = jobs.find(x => x.id === id);
+  const c = clients.find(x => x.id === j?.clientId);
+  if (!j) return;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <style>
+    body{font-family:Arial,sans-serif;padding:40px;color:#222;max-width:800px;margin:0 auto}
+    .header{display:flex;justify-content:space-between;border-bottom:3px solid #f0a500;padding-bottom:16px;margin-bottom:24px}
+    .logo{font-size:22px;font-weight:900;color:#f0a500}
+    .logo span{display:block;font-size:11px;color:#666;font-weight:400;letter-spacing:1px;text-transform:uppercase}
+    h1{font-size:20px;margin-bottom:4px}
+    .status{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;background:#e8f5e9;color:#2e7d32}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:20px 0;background:#f9f9f9;padding:16px;border-radius:8px}
+    .field label{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#888;display:block;margin-bottom:3px}
+    .field p{font-size:14px;font-weight:600;margin:0}
+    .section{margin-top:24px}
+    .section h2{font-size:14px;text-transform:uppercase;letter-spacing:1px;color:#888;border-bottom:1px solid #eee;padding-bottom:8px;margin-bottom:12px}
+    .log{background:#f9f9f9;border-radius:8px;padding:12px;margin-bottom:8px}
+    .log-meta{font-size:11px;color:#888;margin-bottom:4px}
+    .log-text{font-size:13px}
+    .client-note{background:#fff8e1;border-left:3px solid #f0a500;padding:10px 14px;border-radius:4px;font-size:13px;margin-top:8px}
+    .footer{margin-top:40px;border-top:1px solid #eee;padding-top:16px;font-size:11px;color:#aaa;text-align:center}
+  </style></head><body>
+  <div class="header">
+    <div class="logo">LDA<span>Grupo Los Dos Abuelos · Mantenimiento</span></div>
+    <div style="text-align:right"><div style="font-size:12px;color:#888">Reporte de Trabajo</div><div style="font-size:12px">${new Date().toLocaleDateString('es-PA')}</div></div>
+  </div>
+  <h1>${j.title}</h1>
+  <div class="status">${j.status}</div>
+  <div class="grid">
+    <div class="field"><label>Cliente</label><p>${j.clientName}</p></div>
+    <div class="field"><label>Fecha</label><p>${j.date||'—'}</p></div>
+    <div class="field"><label>Técnico</label><p>${j.assignedTo||'Sin asignar'}</p></div>
+    <div class="field"><label>Prioridad</label><p>${j.priority}</p></div>
+    <div class="field"><label>Origen</label><p>${j.origin||'—'}</p></div>
+  </div>
+  ${j.description ? `<div class="section"><h2>Descripción</h2><p style="font-size:14px">${j.description}</p></div>` : ''}
+  ${(j.logs||[]).length ? `<div class="section"><h2>Registro de Avances</h2>${j.logs.map(l=>`<div class="log"><div class="log-meta">${l.user} · ${l.ts}</div><div class="log-text">${l.text}</div></div>`).join('')}</div>` : ''}
+  ${c?.notes ? `<div class="section"><h2>Notas del Cliente</h2><div class="client-note">📌 ${c.notes}</div></div>` : ''}
+  <div class="footer">Generado por LDA Mantenimiento · Grupo Los Dos Abuelos · ${new Date().toLocaleDateString('es-PA')}</div>
+  </body></html>`;
+
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+  setTimeout(() => w.print(), 500);
+}
+
+// ── MODAL HELPERS ─────────────────────────────────────────────────────────────
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+  // Close on overlay click
+  document.getElementById(id).onclick = e => {
+    if (e.target === document.getElementById(id)) closeModal(id);
+  };
+}
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => { t.className = 'toast'; }, 2800);
+}
+</script>
+</body>
+</html>

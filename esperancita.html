@@ -17,12 +17,12 @@
 
   // ── 🔧 WALDO: PEGA AQUÍ TU CONFIGURACIÓN DE FIREBASE ──────────────────────
   const firebaseConfig = {
-    apiKey:            "AIzaSyDVByEIxw4pUqttvz095NrKG8oUkGw2Blk",
-    authDomain:        "grupo-lda.firebaseapp.com",
-    projectId:         "grupo-lda",
-    storageBucket:     "grupo-lda.firebasestorage.app",
-    messagingSenderId: "527242773035",
-    appId:             "1:527242773035:web:f29aa5fe81472f7872606e"
+    apiKey:            "TU_API_KEY",
+    authDomain:        "TU_PROYECTO.firebaseapp.com",
+    projectId:         "TU_PROYECTO_ID",
+    storageBucket:     "TU_PROYECTO.appspot.com",
+    messagingSenderId: "TU_SENDER_ID",
+    appId:             "TU_APP_ID"
   };
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -371,10 +371,21 @@ function startApp(){
   document.getElementById('quickDate').value=now.toISOString().split('T')[0];
   document.getElementById('quickTime').value=now.toTimeString().slice(0,5);
 
-  const{db,collection,onSnapshot,query,orderBy,where}=window._fb;
+  const{db,collection,onSnapshot}=window._fb;
+  // Sin where+orderBy combinados para evitar necesidad de índice en Firestore
   unsubscribe=onSnapshot(
-    query(collection(db,'esperancita_items'),where('uid','==',currentUid),orderBy('createdAt','desc')),
-    snap=>{ items=snap.docs.map(d=>({id:d.id,...d.data()})); renderAll(); },
+    collection(db,'esperancita_items'),
+    snap=>{
+      items=snap.docs
+        .map(d=>({id:d.id,...d.data()}))
+        .filter(d=>d.uid===currentUid)
+        .sort((a,b)=>{
+          const ta=a.createdAt?.toMillis?.()||0;
+          const tb=b.createdAt?.toMillis?.()||0;
+          return tb-ta;
+        });
+      renderAll();
+    },
     err=>{ console.error(err); showToast('Error de sincronización','error'); }
   );
   bindAll();
